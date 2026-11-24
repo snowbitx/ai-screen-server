@@ -1,0 +1,6 @@
+// apps/agent-server/src/utils/index.ts
+import { BaseMessage } from '@langchain/core/messages'
+
+export function getLastUserMessage(messages: BaseMessage[]) {
+  return messages.findLast(message => message.type === 'human')
+}

@@ -1,7 +1,7 @@
-import { createChatModel } from '../ai/model.js'
+import { createChatModel } from '../../ai/model.js'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 
-export const answerMessage = async state => {
+export const handleMessageTask = async state => {
   const model = createChatModel()
   const { page, selectedNodeIds, messages, schema } = state
   const nodes = page.nodes

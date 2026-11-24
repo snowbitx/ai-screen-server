@@ -1,18 +1,26 @@
 // src/ai/model.ts
-import { ChatOpenAI } from '@langchain/openai'
+import { ChatOpenAI, type ChatOpenAIFields } from '@langchain/openai'
 
-export function createChatModel() {
+type CreateChatModelOptions = Omit<ChatOpenAIFields, 'streaming'> & {
+  disableStreaming?: boolean
+}
+
+export function createChatModel({
+  disableStreaming = false,
+  ...fields
+}: CreateChatModelOptions = {}) {
   return new ChatOpenAI({
     model: process.env.AI_MODEL,
+    ...fields,
+    streaming: !disableStreaming,
     // 使用 Responses API
     useResponsesApi: true,
-    modelKwargs: {
-      // 注意，咱自己做的事儿，别让它看见，不往里面存
-      store: false,
-    },
+    // 开启零数据保留，Responses API 不会存储请求和响应
+    zdrEnabled: true,
     configuration: {
       baseURL: process.env.AI_BASE_URL,
       apiKey: process.env.AI_API_KEY,
+      ...fields.configuration,
     },
   })
 }
