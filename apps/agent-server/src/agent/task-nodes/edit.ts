@@ -20,6 +20,36 @@ export async function handleEditTask(state) {
     }
   }
 
+  if (state.classification?.operation === 'update_node') {
+    const selectedNodeId = state.selectedNodeIds[0]
+
+    if (!selectedNodeId) {
+      return {
+        messages: [
+          new AIMessage('当前没有选中任何节点，请先选中一个节点再进行修改。'),
+        ],
+      }
+    }
+
+    // 找到选中的节点
+    const currentNode = state.page.nodes.find(
+      node => node.id === selectedNodeId
+    )
+
+    // 找到选中节点的物料schema
+    const materialSchema = state.schema.material.find(
+      item => item.type === currentNode.type
+    )
+
+    const node = await updateNode(state, currentNode, materialSchema)
+
+    return {
+      action: {
+        type: 'update_node',
+        node,
+      },
+    }
+  }
   return {
     messages: [
       new AIMessage('当前暂时只支持新增节点，其他编辑能力后续再实现。'),
@@ -88,4 +118,36 @@ function generateNode(state, materialSchema) {
     `),
     getLastUserMessage(state.messages),
   ])
+}
+
+/**
+ * 基于当前节点和物料 Schema 生成修改后的节点内容，并保留原有 ID 和类型
+ */
+async function updateNode(state, currentNode, materialSchema) {
+  const zodSchema = z.fromJSONSchema(materialSchema.configSchema) as z.ZodObject
+
+  const model = createNonStreamingModel().withStructuredOutput(zodSchema, {
+    name: 'material_node',
+    method: 'jsonSchema',
+  })
+
+  const res = await model.invoke([
+    new SystemMessage(`
+      你是一个 AI 大屏设计器的节点修改助手。
+      当前选中的节点是 ${materialSchema.name}，请根据用户的要求修改该节点。
+      必须遵守结构化输出 Schema。
+      对于可选属性，如果用户没有明确要求，可以留空。
+
+      当前节点的内容：
+
+      ${JSON.stringify(currentNode, null, 2)}
+    `),
+    getLastUserMessage(state.messages),
+  ])
+
+  return {
+    ...res,
+    id: currentNode.id,
+    type: currentNode.type,
+  }
 }
