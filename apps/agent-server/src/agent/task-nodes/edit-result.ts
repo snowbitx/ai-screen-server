@@ -22,5 +22,5 @@ export async function handleEditResult(state) {
     ),
   ])
 
-  return { messages: [response] }
+  return { messages: [response], action: null }
 }
