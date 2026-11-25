@@ -17,4 +17,10 @@ export const State = new StateSchema({
   }),
   // 用户意图
   classification: ClassificationSchema,
+  action: z
+    .object({
+      type: z.literal('add_node'),
+      node: z.record(z.string(), z.json()),
+    })
+    .nullable(),
 })

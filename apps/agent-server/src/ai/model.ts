@@ -1,4 +1,4 @@
-// src/ai/model.ts
+// ai-screen-server/apps/agent-server/src/ai/model.ts
 import { ChatOpenAI, type ChatOpenAIFields } from '@langchain/openai'
 
 type CreateChatModelOptions = Omit<ChatOpenAIFields, 'streaming'> & {
@@ -22,5 +22,15 @@ export function createChatModel({
       apiKey: process.env.AI_API_KEY,
       ...fields.configuration,
     },
+  })
+}
+
+export function createNonStreamingModel(
+  options?: ConstructorParameters<typeof ChatOpenAI>[0]
+) {
+  return createChatModel({
+    ...options,
+    disableStreaming: true,
+    tags: ['nostream'],
   })
 }
