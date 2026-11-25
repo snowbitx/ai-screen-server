@@ -1,110 +1,67 @@
 // ai-screen-server/apps/agent-server/src/agent/task-nodes/edit.ts
 import { createNonStreamingModel } from '../../ai/model.js'
 import { z } from 'zod'
-import { AIMessage, SystemMessage } from '@langchain/core/messages'
-import { getLastUserMessage } from '../../utils/index.js'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
+
+const ADD_NODE = 'add_node' as const
+const UPDATE_NODE = 'update_node' as const
+const REMOVE_NODE = 'remove_node' as const
 
 /**
- * 处理编辑类任务，目前仅支持新增节点
+ * 按 editPlan 的顺序逐项执行，生成编辑动作
  */
 export async function handleEditTask(state) {
-  if (state.classification.operation === 'add_node') {
-    const selectedMaterial = await getMaterialSchema(state)
-    const node = await generateNode(state, selectedMaterial)
+  const plans = state.editPlan
+  const actions = []
 
-    return {
-      action: {
-        type: 'add_node',
+  for (const plan of plans) {
+    const { type, id, action, prompt } = plan
+    const schema = state.schema.material.find(m => m.type === type)
+
+    if (action === ADD_NODE) {
+      const node = await generateNode(schema, prompt)
+      actions.push({
         node,
-      },
+        type: ADD_NODE,
+      })
+    }
+
+    const currentNode = state.page.nodes.find(node => node.id === id)
+
+    if (action === UPDATE_NODE) {
+      const node = await updateNode(currentNode, schema, prompt)
+      actions.push({
+        node,
+        type: UPDATE_NODE,
+      })
+    }
+
+    if (action === REMOVE_NODE) {
+      actions.push({
+        node: currentNode,
+        type: REMOVE_NODE,
+      })
     }
   }
 
-  if (state.classification?.operation === 'update_node') {
-    const selectedNodeId = state.selectedNodeIds[0]
-
-    if (!selectedNodeId) {
-      return {
-        messages: [
-          new AIMessage('当前没有选中任何节点，请先选中一个节点再进行修改。'),
-        ],
-      }
-    }
-
-    // 找到选中的节点
-    const currentNode = state.page.nodes.find(
-      node => node.id === selectedNodeId
-    )
-
-    // 找到选中节点的物料schema
-    const materialSchema = state.schema.material.find(
-      item => item.type === currentNode.type
-    )
-
-    const node = await updateNode(state, currentNode, materialSchema)
-
-    return {
-      action: {
-        type: 'update_node',
-        node,
-      },
-    }
-  }
   return {
-    messages: [
-      new AIMessage('当前暂时只支持新增节点，其他编辑能力后续再实现。'),
-    ],
+    actions,
   }
 }
 
 /**
- * 根据用户需求，从当前页面的可用物料中选择最合适的一个
+ * 根据物料 Schema 和提示词生成完整节点
  */
-async function getMaterialSchema(state) {
-  const materials = state.schema.material.map(item => ({
-    type: item.type,
-    name: item.name,
-  }))
-
-  const model = createNonStreamingModel().withStructuredOutput(
-    z.object({
-      type: z
-        .enum(materials.map(item => item.type))
-        .describe('根据用户需求选择的物料类型'),
-    }),
-    {
-      // 如果是jsonSchema 此处只作 排查name使用，如果是工具 则是工具名称
-      name: 'material_selection',
-      // 决定走 OpenAI 的 Structured Outputs，而不是工具调用（functionCalling）
-      method: 'jsonSchema',
-    }
-  )
-
-  const res = await model.invoke([
-    new SystemMessage(`
-      你是一个 AI 大屏设计器的物料选择助手。
-      请根据用户的要求，从下面的可用物料中选择最合适的一个。
-      可用物料：
-      ${JSON.stringify(materials, null, 2)}
-    `),
-    getLastUserMessage(state.messages),
-  ])
-
-  return state.schema.material.find(item => item.type === res.type)
-}
-
-/**
- * 基于物料配置的 Schema 生成节点内容，并补充节点唯一 ID
- */
-function generateNode(state, materialSchema) {
+async function generateNode(materialSchema, prompt) {
   const schema = z.fromJSONSchema(materialSchema.configSchema) as z.ZodObject
 
   const model = createNonStreamingModel().withStructuredOutput(
     schema.extend({
-      id: z.literal(crypto.randomUUID()).describe('节点唯一 ID'),
+      id: z.literal(crypto.randomUUID()).describe('节点的唯一标识符。'),
+      type: z.literal(materialSchema.type).describe('节点的类型。'),
     }),
     {
-      name: 'add_node_schema',
+      name: 'material_node',
       method: 'jsonSchema',
     }
   )
@@ -116,17 +73,16 @@ function generateNode(state, materialSchema) {
       必须遵守结构化输出 Schema。
       对于可选属性，如果用户没有明确要求，可以留空。
     `),
-    getLastUserMessage(state.messages),
+    new HumanMessage(prompt),
   ])
 }
 
 /**
- * 基于当前节点和物料 Schema 生成修改后的节点内容，并保留原有 ID 和类型
+ * 根据当前节点、物料 Schema 和提示词生成修改后的节点
  */
-async function updateNode(state, currentNode, materialSchema) {
-  const zodSchema = z.fromJSONSchema(materialSchema.configSchema) as z.ZodObject
-
-  const model = createNonStreamingModel().withStructuredOutput(zodSchema, {
+async function updateNode(currentNode, materialSchema, prompt) {
+  const schema = z.fromJSONSchema(materialSchema.configSchema) as z.ZodObject
+  const model = createNonStreamingModel().withStructuredOutput(schema, {
     name: 'material_node',
     method: 'jsonSchema',
   })
@@ -138,11 +94,15 @@ async function updateNode(state, currentNode, materialSchema) {
       必须遵守结构化输出 Schema。
       对于可选属性，如果用户没有明确要求，可以留空。
 
+      规则：
+       - 只能修改当前节点的 props、layout、style 等属性。
+       - 禁止修改节点的 id、type 等属性。
+
       当前节点的内容：
 
       ${JSON.stringify(currentNode, null, 2)}
     `),
-    getLastUserMessage(state.messages),
+    new HumanMessage(prompt),
   ])
 
   return {

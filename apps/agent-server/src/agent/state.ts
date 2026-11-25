@@ -1,6 +1,7 @@
 import { MessagesValue, StateSchema } from '@langchain/langgraph'
 import { z } from 'zod'
 import { ClassificationSchema } from './classification.js'
+import { PlanEditSchema } from './task-nodes/planEdit.js'
 
 // z.record(z.string(), z.json()) 表示是对象 第一个参数是 key需要是字符串，第二个参数是对象的值-可以转json的数据（非map和set）
 export const State = new StateSchema({
@@ -17,6 +18,17 @@ export const State = new StateSchema({
   }),
   // 用户意图
   classification: ClassificationSchema,
+  // 编辑计划
+  editPlan: z.array(PlanEditSchema).default([]),
+  // 编辑动作
+  actions: z
+    .array(
+      z.object({
+        type: z.enum(['add_node', 'update_node', 'remove_node']),
+        node: z.record(z.string(), z.json()),
+      })
+    )
+    .default([]),
   action: z
     .object({
       type: z.enum(['add_node', 'update_node']),

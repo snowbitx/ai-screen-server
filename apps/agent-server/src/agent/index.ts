@@ -5,6 +5,7 @@ import {
   handleEditResult,
   handleMessageTask,
   handlePageTask,
+  handlePlanEdit,
 } from './task-nodes/index.js'
 import { classifyTask } from './classification.js'
 
@@ -14,14 +15,20 @@ const builder = new StateGraph(State)
   .addNode('handleMessageTask', handleMessageTask)
   .addNode('handlePageTask', handlePageTask)
   .addNode('handleEditTask', handleEditTask)
+  // 添加一个 planEdit 节点
+  .addNode('handlePlanEdit', handlePlanEdit)
   .addNode('handleEditResult', handleEditResult)
   .addEdge(START, 'classifyTask')
 
   .addConditionalEdges('classifyTask', state => state.classification.task, {
     message: 'handleMessageTask',
     page: 'handlePageTask',
-    edit: 'handleEditTask',
+    edit: 'handlePlanEdit',
   })
+  // 先走 planEdit 完成后再走 editTask
+  .addEdge('handlePlanEdit', 'handleEditTask')
+  .addEdge('handleMessageTask', END)
+  .addEdge('handlePageTask', END)
   .addEdge('handleEditTask', 'handleEditResult')
   .addEdge('handleEditResult', END)
 
