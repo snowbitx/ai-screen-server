@@ -1,7 +1,8 @@
-import { START, StateGraph } from '@langchain/langgraph'
+import { END, START, StateGraph } from '@langchain/langgraph'
 import { State } from './state.js'
 import {
   handleEditTask,
+  handleEditResult,
   handleMessageTask,
   handlePageTask,
 } from './task-nodes/index.js'
@@ -13,6 +14,7 @@ const builder = new StateGraph(State)
   .addNode('handleMessageTask', handleMessageTask)
   .addNode('handlePageTask', handlePageTask)
   .addNode('handleEditTask', handleEditTask)
+  .addNode('handleEditResult', handleEditResult)
   .addEdge(START, 'classifyTask')
 
   .addConditionalEdges('classifyTask', state => state.classification.task, {
@@ -20,6 +22,8 @@ const builder = new StateGraph(State)
     page: 'handlePageTask',
     edit: 'handleEditTask',
   })
+  .addEdge('handleEditTask', 'handleEditResult')
+  .addEdge('handleEditResult', END)
 
 // addConditionalEdges(
 //   source,      // 从哪个节点出发
